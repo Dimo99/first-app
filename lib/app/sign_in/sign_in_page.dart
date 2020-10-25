@@ -32,7 +32,7 @@ class SignInPage extends ConsumerWidget {
       },
       child: SignInPageContents(
         viewModel: signInModel,
-        title: 'Architecture Demo',
+        title: 'Smart Clean',
       ),
     );
   }
@@ -40,7 +40,7 @@ class SignInPage extends ConsumerWidget {
 
 class SignInPageContents extends StatelessWidget {
   const SignInPageContents(
-      {Key key, this.viewModel, this.title = 'Architecture Demo'})
+      {Key key, this.viewModel, this.title = 'Smart Clean'})
       : super(key: key);
   final SignInViewModel viewModel;
   final String title;
