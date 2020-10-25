@@ -3,6 +3,11 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:starter_architecture_flutter_firebase/app/home/bar/bottom.dart';
+import 'package:flushbar/flushbar.dart';
+import 'package:starter_architecture_flutter_firebase/app/home/map/add_location.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:starter_architecture_flutter_firebase/app/home/map/location_view.dart';
+import 'package:starter_architecture_flutter_firebase/module/location.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -10,75 +15,102 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  Map<String, Location> map;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  // Set<Marker> _markers = HashSet<Marker>();
-  // Set<Polygon> _polygons = HashSet<Polygon>();
-  // Set<Polyline> _polylines = HashSet<Polyline>();
-  // Set<Circle> _circles = HashSet<Circle>();
-  // bool _showMapStyle = false;
-  //
+
+  final databaseReference = FirebaseFirestore.instance;
+
+  static Function addSnackbarDismiss;
+
+  final Flushbar addSnackbar = Flushbar(
+    margin: const EdgeInsets.all(8),
+    borderRadius: 8,
+    flushbarPosition: FlushbarPosition.TOP,
+    message: 'Click on the map to add location',
+    icon: const Icon(Icons.info_outline, color: Colors.white),
+    mainButton: FlatButton(
+      onPressed: () {
+        addSnackbarDismiss();
+      },
+      child: const Icon(Icons.close, color: Colors.white),
+    ),
+  );
+
+  bool isAddLocationTurnedOn;
+
+  Set<Marker> _markers = HashSet<Marker>();
+  Set<Circle> _circles = HashSet<Circle>();
+
   GoogleMapController _mapController;
-  // BitmapDescriptor _markerIcon;
-  //
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _setMarkerIcon();
-  //   _setPolygons();
-  //   _setPolylines();
-  //   _setCircles();
-  // }
-  //
-  // void _setMarkerIcon() async {
-  //   _markerIcon =
-  //   await BitmapDescriptor.fromAssetImage(ImageConfiguration(), 'assets/noodle_icon.png');
-  // }
-  //
-  // void _setPolygons() {
-  //   List<LatLng> polygonLatLongs = List<LatLng>();
-  //   polygonLatLongs.add(LatLng(37.78493, -122.42932));
-  //   polygonLatLongs.add(LatLng(37.78693, -122.41942));
-  //   polygonLatLongs.add(LatLng(37.78923, -122.41542));
-  //   polygonLatLongs.add(LatLng(37.78923, -122.42582));
-  //
-  //   _polygons.add(
-  //     Polygon(
-  //       polygonId: PolygonId("0"),
-  //       points: polygonLatLongs,
-  //       fillColor: Colors.white,
-  //       strokeWidth: 1,
-  //     ),
-  //   );
-  // }
-  //
-  // void _setPolylines() {
-  //   List<LatLng> polylineLatLongs = List<LatLng>();
-  //   polylineLatLongs.add(LatLng(37.74493, -122.42932));
-  //   polylineLatLongs.add(LatLng(37.74693, -122.41942));
-  //   polylineLatLongs.add(LatLng(37.74923, -122.41542));
-  //   polylineLatLongs.add(LatLng(37.74923, -122.42582));
-  //
-  //   _polylines.add(
-  //     Polyline(
-  //       polylineId: PolylineId("0"),
-  //       points: polylineLatLongs,
-  //       color: Colors.purple,
-  //       width: 1,
-  //     ),
-  //   );
-  // }
-  //
-  // void _setCircles() {
-  //   _circles.add(
-  //     Circle(
-  //         circleId: CircleId("0"),
-  //         center: LatLng(37.76493, -122.42432),
-  //         radius: 1000,
-  //         strokeWidth: 2,
-  //         fillColor: Color.fromRGBO(102, 51, 153, .5)),
-  //   );
-  // }
-  //
+  BitmapDescriptor _markerIcon;
+
+  @override
+  void initState() {
+    super.initState();
+    _setMarkerIcon();
+    map = <String, Location>{};
+    isAddLocationTurnedOn = false;
+    addSnackbarDismiss = () {
+      addSnackbar.dismiss();
+    };
+    fetch();
+  }
+
+  Future<void> fetch() async {
+    Map<String, Location> fetchMap = <String, Location>{};
+
+    _markers.clear();
+    _circles.clear();
+
+    await databaseReference.collection("locations").get()
+    .then((snapshot) {
+      for (var doc in snapshot.docs) {
+        Map<String, dynamic> fetchData = doc.data();
+        fetchData['id'] = doc.id;
+        fetchMap[doc.id] = Location.fromJson(fetchData);
+        setState(() {
+          _markers.add(
+            Marker(
+              markerId: MarkerId(doc.id),
+              position: LatLng(
+                double.parse(fetchData['x']),
+                double.parse(fetchData['y'])
+              ),
+              onTap: () {
+                onMarkerTap(doc.id);
+              },
+              icon: _markerIcon
+            ),
+          );
+          final int red = ((255 * (100 - int.parse(fetchData['progressLevel']))) / 100).round();
+          final int green = ((255 * (int.parse(fetchData['progressLevel']))) / 100).round();
+          _circles.add(
+            Circle(
+              circleId: CircleId(doc.id),
+              center: LatLng(
+                double.parse(fetchData['x']),
+                double.parse(fetchData['y'])
+              ),
+              strokeWidth: 0,
+              radius: double.parse(fetchData['radius']),
+              fillColor: Color.fromRGBO(red, green, 0, .2)),
+          );
+        });
+      }
+    });
+
+    setState(() {
+      map = fetchMap;
+    });
+  }
+
+
+  void _setMarkerIcon() async {
+    _markerIcon = await BitmapDescriptor.fromAssetImage(ImageConfiguration(), 'assets/trash.png');
+  }
+
+
   void _onMapCreated(GoogleMapController controller) {
     setState(() {
       _mapController = controller;
@@ -97,7 +129,9 @@ class _HomePageState extends State<HomePage> {
               target: LatLng(42.674563, 23.330553),
               zoom: 16,
             ),
-            onTap: (location) => print(location.longitude.toString() + " " + location.latitude.toString()),
+            onTap: (location) => onMapTap(location),
+            markers: _markers,
+            circles: _circles,
             myLocationEnabled: true,
             myLocationButtonEnabled: true,
           ),
@@ -105,8 +139,8 @@ class _HomePageState extends State<HomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.blueAccent,
-        onPressed: onAddTap,
-        child: const Icon(Icons.add),
+        onPressed: onIconTap,
+        child: isAddLocationTurnedOn ? const Icon(Icons.remove) : const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: const Bottom(
@@ -116,65 +150,35 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void onAddTap() {
-    final snackBar = SnackBar(
-      content: const Text('Yay! A SnackBar!'),
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: () {
-          // Some code to undo the change.
-        },
-      ),
+  Future<void> onMarkerTap(String id) async {
+    await Navigator.of(context).push<MaterialPageRoute>(
+      MaterialPageRoute(builder: (context) => LocationView(location: map[id])),
     );
-
-    // Find the Scaffold in the widget tree and use
-    // it to show a SnackBar.
-    _scaffoldKey.currentState.showSnackBar(snackBar);
-  }
-}
-
-/*class HomePage extends StatefulWidget {
-  @override
-  _HomePageState createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  TabItem _currentTab = TabItem.jobs;
-
-  final Map<TabItem, GlobalKey<NavigatorState>> navigatorKeys = {
-    TabItem.jobs: GlobalKey<NavigatorState>(),
-    TabItem.entries: GlobalKey<NavigatorState>(),
-    TabItem.account: GlobalKey<NavigatorState>(),
-  };
-
-  Map<TabItem, WidgetBuilder> get widgetBuilders {
-    return {
-      TabItem.jobs: (_) => GMap(),
-      TabItem.entries: (_) => EntriesPage(),
-      TabItem.account: (_) => AccountPage(),
-    };
+    await fetch();
   }
 
-  void _select(TabItem tabItem) {
-    if (tabItem == _currentTab) {
-      // pop to first route
-      navigatorKeys[tabItem].currentState.popUntil((route) => route.isFirst);
-    } else {
-      setState(() => _currentTab = tabItem);
+  Future<void> onMapTap(LatLng location) async {
+    if (isAddLocationTurnedOn) {
+      setState(() {
+        isAddLocationTurnedOn = !isAddLocationTurnedOn;
+      });
+      await addSnackbar.dismiss();
+      await Navigator.of(context).push<MaterialPageRoute>(
+        MaterialPageRoute(builder: (context) => AddLocation(location: location)),
+      );
+      await fetch();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async =>
-          !await navigatorKeys[_currentTab].currentState.maybePop(),
-      child: CupertinoHomeScaffold(
-        currentTab: _currentTab,
-        onSelectTab: _select,
-        widgetBuilders: widgetBuilders,
-        navigatorKeys: navigatorKeys,
-      ),
-    );
+  void onIconTap() {
+    setState(() {
+      isAddLocationTurnedOn = !isAddLocationTurnedOn;
+    });
+
+    if (isAddLocationTurnedOn) {
+      addSnackbar.show(context);
+    } else {
+      addSnackbar.dismiss();
+    }
   }
-}*/
+}

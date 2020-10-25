@@ -37,12 +37,6 @@ class Bottom extends StatelessWidget {
                 print('Search button pressed');
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.favorite),
-              onPressed: () {
-                print('Favorite button pressed');
-              },
-            ),
           ],
         ),
       ),
